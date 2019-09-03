@@ -32,6 +32,7 @@ class MsImageDis(nn.Module):
         for _ in range(self.num_scales):
             self.cnns.append(self._make_net())
 
+
     def _make_net(self):
         dim = self.dim
         cnn_x = []
@@ -52,16 +53,17 @@ class MsImageDis(nn.Module):
 
     def calc_dis_loss(self, input_fake, input_real):
         # calculate the loss to train D
-        outs0 = self.forward(input_fake)
-        outs1 = self.forward(input_real)
+        outs0 = self.forward(input_fake)  # 前向输出,生成的假图的前向  0
+        outs1 = self.forward(input_real)  # 真实图片的前向           1
         loss = 0
 
         for it, (out0, out1) in enumerate(zip(outs0, outs1)):
             if self.gan_type == 'lsgan':
                 loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
             elif self.gan_type == 'nsgan':
-                all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
-                all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
+                all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)  # 二类的交叉熵? 0
+                all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)   # 二类的交叉熵? 1
+                # loss = -wi[yn*log(xn) + (1-yn)log(1-xn)]  这里 yn: all0, all1; xn:out0, out1
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
                                    F.binary_cross_entropy(F.sigmoid(out1), all1))
             else:
@@ -70,7 +72,7 @@ class MsImageDis(nn.Module):
 
     def calc_gen_loss(self, input_fake):
         # calculate the loss to train G
-        outs0 = self.forward(input_fake)
+        outs0 = self.forward(input_fake)    # 0
         loss = 0
         for it, (out0) in enumerate(outs0):
             if self.gan_type == 'lsgan':
@@ -107,7 +109,6 @@ class AdaINGen(nn.Module):
 
         # MLP to generate AdaIN parameters
         self.mlp = MLP(style_dim, self.get_num_adain_params(self.dec), mlp_dim, 3, norm='none', activ=activ)
-
     def forward(self, images):
         # reconstruct an image
         content, style_fake = self.encode(images)
@@ -186,6 +187,8 @@ class VAEGen(nn.Module):
 ##################################################################################
 
 class StyleEncoder(nn.Module):
+    # 这里之所以style 要变成一个变量，实际上就是类似于condition GAN的思想，我们希望图片的style应该是一个长度一定的向量,
+    # 这样的向量来代表图片的style,一般这样的向量长度为8
     def __init__(self, n_downsample, input_dim, dim, style_dim, norm, activ, pad_type):
         super(StyleEncoder, self).__init__()
         self.model = []
@@ -483,6 +486,7 @@ class AdaptiveInstanceNorm2d(nn.Module):
 
 
 class LayerNorm(nn.Module):
+    # C, H, W
     def __init__(self, num_features, eps=1e-5, affine=True):
         super(LayerNorm, self).__init__()
         self.num_features = num_features
