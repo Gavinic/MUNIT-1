@@ -1,3 +1,4 @@
+# -*- coding=utf-8 -*-
 """
 Copyright (C) 2018 NVIDIA Corporation.  All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
@@ -83,6 +84,7 @@ IMG_EXTENSIONS = [
 
 
 def is_image_file(filename):
+    # any() 函数用于判断给定的可迭代参数 iterable 是否全部为 False，则返回 False，如果有一个为 True，则返回 True。 其实就是或
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
@@ -90,6 +92,8 @@ def make_dataset(dir):
     images = []
     assert os.path.isdir(dir), '%s is not a valid directory' % dir
 
+    # os.walk() 方法用于通过在目录树中游走输出在目录中的文件名，向上或者向下
+    # https://www.runoob.com/python/os-walk.html
     for root, _, fnames in sorted(os.walk(dir)):
         for fname in fnames:
             if is_image_file(fname):
@@ -99,12 +103,16 @@ def make_dataset(dir):
     return images
 
 
+# https://blog.csdn.net/TH_NUM/article/details/80877435
 class ImageFolder(data.Dataset):
 
     def __init__(self, root, transform=None, return_paths=False,
                  loader=default_loader):
+        # imgs 表示的图片路径的list
         imgs = sorted(make_dataset(root))
         if len(imgs) == 0:
+            # Python join() 方法用于将序列中的元素以指定的字符连接生成一个新的字符串。
+            # https://www.runoob.com/python/att-string-join.html
             raise(RuntimeError("Found 0 images in: " + root + "\n"
                                "Supported image extensions are: " +
                                ",".join(IMG_EXTENSIONS)))
@@ -117,7 +125,7 @@ class ImageFolder(data.Dataset):
 
     def __getitem__(self, index):
         path = self.imgs[index]
-        img = self.loader(path)
+        img = self.loader(path)  # PIL 类型的图片数据
         if self.transform is not None:
             img = self.transform(img)
         if self.return_paths:
