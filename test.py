@@ -13,6 +13,8 @@ import torch
 import os
 from torchvision import transforms
 from PIL import Image
+import shutil
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="net configuration")
@@ -22,7 +24,7 @@ parser.add_argument('--checkpoint', type=str, help="checkpoint of autoencoders")
 parser.add_argument('--style', type=str, default='', help="style image path")
 parser.add_argument('--a2b', type=int, default=1, help="1 for a2b and 0 for b2a")
 parser.add_argument('--seed', type=int, default=10, help="random seed")
-parser.add_argument('--num_style',type=int, default=10, help="number of styles to sample")
+parser.add_argument('--num_style',type=int, default=3, help="number of styles to sample")
 parser.add_argument('--synchronized', action='store_true', help="whether use synchronized style code or not")
 parser.add_argument('--output_only', action='store_true', help="whether use synchronized style code or not")
 parser.add_argument('--output_path', type=str, default='.', help="path for logs, checkpoints, and VGG model weight")
@@ -77,33 +79,71 @@ with torch.no_grad():
     transform = transforms.Compose([transforms.Resize(new_size),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    image = Variable(transform(Image.open(opts.input).convert('RGB')).unsqueeze(0).cuda())
-    style_image = Variable(transform(Image.open(opts.style).convert('RGB')).unsqueeze(0).cuda()) if opts.style != '' else None
 
-    # Start testing
-    content, _ = encode(image)
+    imageRoot = os.path.join(opts.input , 'images')   # original image
+    gtRoot = os.path.join(opts.input, 'location_GT')  # original input GT
+    imageOutPut = os.path.join(opts.output_folder, 'images-gan-aug')
+    gtOutPut = os.path.join(opts.output_folder , 'gt-gan-aug')
 
-    if opts.trainer == 'MUNIT':
-        style_rand = Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda())
-        if opts.style != '':
-            _, style = style_encode(style_image)
-        else:
-            style = style_rand
-        for j in range(opts.num_style):
-            s = style[j].unsqueeze(0)
-            outputs = decode(content, s)
+    if not os.path.exists(imageOutPut) or not os.path.exists(gtOutPut):
+        os.makedirs(imageOutPut)
+        os.makedirs(gtOutPut)
+
+
+    filelist = os.listdir(imageRoot)
+    print(filelist[1])
+    np.random.shuffle(filelist)   # no return value
+    np.random.shuffle(filelist)
+
+    print('total: ', len(filelist))
+    count = 0
+    for file in filelist:
+        imagepath = os.path.join(imageRoot, file)
+
+        gf_path = 'gt_' + file.split('.')[0] + '.txt'
+        gt_files = os.path.join(gtRoot, gf_path)
+
+        if not os.path.exists(gt_files) or not os.path.exists(imagepath):
+            print('ImagePath: ', imagepath)
+            print('GtPath: ', gt_files)
+            raise FileNotFoundError
+
+        image = Variable(transform(Image.open(imagepath).convert('RGB')).unsqueeze(0).cuda())
+        style_image = Variable(transform(Image.open(opts.style).convert('RGB')).unsqueeze(0).cuda()) \
+            if opts.style != '' else None
+
+        # Start testing
+        content, _ = encode(image)
+
+        if opts.trainer == 'MUNIT':
+            style_rand = Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda())
+            if opts.style != '':
+                _, style = style_encode(style_image)
+            else:
+                style = style_rand
+            for j in range(opts.num_style):
+                s = style[j].unsqueeze(0)  # random style
+                outputs = decode(content, s)
+                outputs = (outputs + 1) / 2.
+                # print('count + j', count + j)
+                # path = os.path.join(opts.output_folder, 'output{:03d}.jpg'.format(j))
+                path = os.path.join(imageOutPut, '{:05d}.jpg'.format(count))
+                gtfilePath = os.path.join(gtOutPut, 'gt_' + '{:05d}.txt'.format(count))
+
+                vutils.save_image(outputs.data, path, padding=0, normalize=True)
+                shutil.copyfile(gt_files, gtfilePath)
+                # print('count: ', count)
+                count += 1
+
+        elif opts.trainer == 'UNIT':
+            outputs = decode(content)
             outputs = (outputs + 1) / 2.
-            path = os.path.join(opts.output_folder, 'output{:03d}.jpg'.format(j))
+            path = os.path.join(opts.output_folder, 'output.jpg')
             vutils.save_image(outputs.data, path, padding=0, normalize=True)
-    elif opts.trainer == 'UNIT':
-        outputs = decode(content)
-        outputs = (outputs + 1) / 2.
-        path = os.path.join(opts.output_folder, 'output.jpg')
-        vutils.save_image(outputs.data, path, padding=0, normalize=True)
-    else:
-        pass
+        else:
+            pass
 
-    if not opts.output_only:
-        # also save input images
-        vutils.save_image(image.data, os.path.join(opts.output_folder, 'input.jpg'), padding=0, normalize=True)
+        if not opts.output_only:
+            # also save input images
+            vutils.save_image(image.data, os.path.join(opts.output_folder, 'input.jpg'), padding=0, normalize=True)
 
